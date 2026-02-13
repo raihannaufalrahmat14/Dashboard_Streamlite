@@ -2,15 +2,13 @@ import streamlit as st
 import joblib
 import pandas as pd
 import re
-import nltk
 import matplotlib.pyplot as plt
 import seaborn as sns
 from wordcloud import WordCloud
-import os
 
-from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
+import nltk
 
 # =============================
 # PAGE CONFIG
@@ -21,42 +19,53 @@ st.set_page_config(
 )
 
 # =============================
-# DOWNLOAD NLTK DATA (SAFE FOR STREAMLIT CLOUD)
+# DOWNLOAD STOPWORDS ONLY
 # =============================
 @st.cache_resource
-def download_nltk():
-    nltk.download('punkt')
+def load_stopwords():
     nltk.download('stopwords')
+    return set(stopwords.words('indonesian'))
 
-download_nltk()
+stop_words = load_stopwords()
 
 # =============================
-# LOAD STOPWORDS AND STEMMER
+# STEMMER
 # =============================
 @st.cache_resource
-def load_nlp_tools():
-    stop_words = set(stopwords.words('indonesian'))
+def load_stemmer():
     factory = StemmerFactory()
-    stemmer = factory.create_stemmer()
-    return stop_words, stemmer
+    return factory.create_stemmer()
 
-stop_words, stemmer = load_nlp_tools()
+stemmer = load_stemmer()
 
 # =============================
-# TEXT PREPROCESSING
+# CLEANING
 # =============================
 def cleaning(text):
+
     text = str(text).lower()
-    text = re.sub(r'http\S+|www\S+', '', text)
+
+    text = re.sub(r'http\S+', '', text)
+
     text = re.sub(r'[^a-z\s]', '', text)
+
     text = re.sub(r'\s+', ' ', text).strip()
+
     return text
 
+# =============================
+# PREPROCESS (NO NLTK TOKENIZER)
+# =============================
 def preprocess_text(text):
+
     text = cleaning(text)
-    tokens = word_tokenize(text)
+
+    tokens = text.split()
+
     tokens = [word for word in tokens if word not in stop_words]
+
     tokens = [stemmer.stem(word) for word in tokens]
+
     return " ".join(tokens)
 
 # =============================
@@ -64,122 +73,143 @@ def preprocess_text(text):
 # =============================
 @st.cache_resource
 def load_model():
+
     try:
+
         model = joblib.load("best_svm_model.pkl")
+
         vectorizer = joblib.load("tfidf_vectorizer.pkl")
+
         return model, vectorizer
+
     except:
-        st.error("Model tidak ditemukan!")
+
+        st.error("File model tidak ditemukan")
+
         st.stop()
 
 model, vectorizer = load_model()
 
 # =============================
-# LOAD DATA
+# LOAD DATASET
 # =============================
 @st.cache_data
 def load_data():
+
     try:
-        df = pd.read_csv("grab_reviews.csv", sep=';', encoding='latin1')
+
+        df = pd.read_csv("grab_reviews.csv", sep=";", encoding="latin1")
+
     except:
-        st.error("Dataset grab_reviews.csv tidak ditemukan!")
+
+        st.error("File grab_reviews.csv tidak ditemukan")
+
         st.stop()
 
-    df['clean'] = df['content'].apply(preprocess_text)
+    df['clean_text'] = df['content'].apply(preprocess_text)
 
     def label(score):
+
         if score <= 2:
+
             return "negatif"
+
         elif score == 3:
+
             return "netral"
+
         else:
+
             return "positif"
 
     df['sentimen'] = df['score'].apply(label)
 
     summary = df['sentimen'].value_counts().reset_index()
-    summary.columns = ['Sentimen', 'Jumlah']
-    summary['Persentase'] = summary['Jumlah'] / summary['Jumlah'].sum() * 100
 
-    pos = " ".join(df[df.sentimen=="positif"].clean)
-    neu = " ".join(df[df.sentimen=="netral"].clean)
-    neg = " ".join(df[df.sentimen=="negatif"].clean)
+    summary.columns = ["Sentimen", "Jumlah"]
 
-    return summary, pos, neu, neg
+    summary["Persentase"] = summary["Jumlah"] / summary["Jumlah"].sum() * 100
 
-summary, pos_text, neu_text, neg_text = load_data()
+    positif = " ".join(df[df.sentimen=="positif"].clean_text)
+
+    netral = " ".join(df[df.sentimen=="netral"].clean_text)
+
+    negatif = " ".join(df[df.sentimen=="negatif"].clean_text)
+
+    return summary, positif, netral, negatif
+
+summary, positif_text, netral_text, negatif_text = load_data()
 
 # =============================
 # TITLE
 # =============================
-st.title("📊 Aplikasi Analisis Sentimen Ulasan Grab")
+st.title("📊 Aplikasi Analisis Sentimen Ulasan Grab Menggunakan SVM")
+
+st.write("Model Support Vector Machine digunakan untuk mengklasifikasikan sentimen ulasan pengguna aplikasi Grab.")
 
 # =============================
-# PREDICTION SECTION
+# INPUT PREDIKSI
 # =============================
 st.header("Prediksi Sentimen")
 
-input_text = st.text_area(
-    "Masukkan ulasan:",
-    "Aplikasi ini sangat membantu"
-)
+user_input = st.text_area("Masukkan teks ulasan:")
 
 if st.button("Prediksi"):
 
-    if input_text.strip() == "":
+    if user_input == "":
+
         st.warning("Masukkan teks terlebih dahulu")
+
     else:
 
-        processed = preprocess_text(input_text)
+        processed = preprocess_text(user_input)
+
         vector = vectorizer.transform([processed])
-        result = model.predict(vector)[0]
 
-        if result == "positif":
-            st.success("Hasil Prediksi: POSITIF 😊")
+        hasil = model.predict(vector)[0]
 
-        elif result == "netral":
-            st.info("Hasil Prediksi: NETRAL 😐")
+        if hasil == "positif":
+
+            st.success("Sentimen: POSITIF")
+
+        elif hasil == "netral":
+
+            st.info("Sentimen: NETRAL")
 
         else:
-            st.error("Hasil Prediksi: NEGATIF 😠")
+
+            st.error("Sentimen: NEGATIF")
 
 # =============================
-# BAR CHART
+# VISUALISASI
 # =============================
-st.header("Distribusi Sentimen")
+st.header("Visualisasi Distribusi Sentimen")
 
 col1, col2 = st.columns(2)
 
+# BAR CHART
 with col1:
 
     fig, ax = plt.subplots()
 
-    sns.barplot(
-        x="Sentimen",
-        y="Jumlah",
-        data=summary,
-        ax=ax
-    )
+    sns.barplot(x="Sentimen", y="Jumlah", data=summary, ax=ax)
+
+    ax.set_title("Distribusi Sentimen")
 
     st.pyplot(fig)
 
-# =============================
 # DONUT CHART
-# =============================
 with col2:
 
     fig, ax = plt.subplots()
 
-    wedges, texts, autotexts = ax.pie(
-        summary['Persentase'],
-        autopct="%1.1f%%",
-        startangle=90
-    )
+    ax.pie(summary["Persentase"], autopct="%1.1f%%")
 
-    centre = plt.Circle((0,0),0.70,fc='white')
+    centre = plt.Circle((0,0),0.70,fc="white")
+
     fig.gca().add_artist(centre)
 
-    ax.axis('equal')
+    ax.set_title("Persentase Sentimen")
 
     st.pyplot(fig)
 
@@ -190,28 +220,30 @@ st.header("WordCloud")
 
 c1, c2, c3 = st.columns(3)
 
-def show_wordcloud(text, title, column):
+def tampil_wordcloud(text, title, col):
 
-    with column:
+    with col:
 
         st.subheader(title)
 
-        if text.strip() == "":
+        if text == "":
+
             st.write("Tidak ada data")
-            return
 
-        wc = WordCloud(
-            width=400,
-            height=200,
-            background_color="white"
-        ).generate(text)
+        else:
 
-        fig, ax = plt.subplots()
-        ax.imshow(wc)
-        ax.axis("off")
+            wc = WordCloud(width=400, height=200, background_color="white").generate(text)
 
-        st.pyplot(fig)
+            fig, ax = plt.subplots()
 
-show_wordcloud(pos_text, "Positif", c1)
-show_wordcloud(neu_text, "Netral", c2)
-show_wordcloud(neg_text, "Negatif", c3)
+            ax.imshow(wc)
+
+            ax.axis("off")
+
+            st.pyplot(fig)
+
+tampil_wordcloud(positif_text, "Positif", c1)
+
+tampil_wordcloud(netral_text, "Netral", c2)
+
+tampil_wordcloud(negatif_text, "Negatif", c3)

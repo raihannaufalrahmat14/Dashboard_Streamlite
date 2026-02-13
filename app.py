@@ -56,12 +56,12 @@ def load_ml_models():
         vectorizer = joblib.load('tfidf_vectorizer.pkl')
         return model, vectorizer
     except FileNotFoundError:
-        st.error("Error: File model (.pkl) tidak ditemukan. Pastikan file ada di folder yang sama.")
+        st.error("Error: File model (.pkl) tidak ditemukan.")
         st.stop()
 
 best_svm_model, tfidf_vectorizer = load_ml_models()
 
-# --- 5. Load Data & Evaluation ---
+# --- 5. Load Data & Evaluation (DEBUGGING) ---
 @st.cache_data
 def load_and_evaluate():
     try:
@@ -80,21 +80,33 @@ def load_and_evaluate():
     
     df['sentimen'] = df['score'].apply(label_sentiment)
 
-    # Menghitung Distribusi untuk Plot
-    temp_df = df.groupby('sentimen').count()['content'].reset_index()
-    temp_df.columns = ['Sentimen', 'Jumlah']
-    temp_df['Percentage'] = (temp_df['Jumlah'] / temp_df['Jumlah'].sum()) * 100
+    # --- DEBUGGING: Pengecekan Data ---
+    with st.expander("Lihat Debug Data (Jika akurasi 0%)"):
+        st.write("Contoh data setelah preprocessing (kolom 'final_text'):")
+        st.write(df[['content', 'final_text', 'sentimen']].head())
+        st.write("Jumlah data kosong setelah preprocessing:", df[df['final_text'] == '']['final_text'].count())
+        st.write("Distribusi Sentimen Asli:", df['sentimen'].value_counts())
+    # ----------------------------------------
 
     # Split Data & Hitung Confusion Matrix
     X = df['final_text']
     y = df['sentimen']
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     
+    st.write(f"Jumlah data uji: {len(y_test)}")
+
     X_test_tfidf = tfidf_vectorizer.transform(X_test)
     y_pred = best_svm_model.predict(X_test_tfidf)
     
+    st.write("Label unik yang diprediksi model:", pd.Series(y_pred).unique())
+
     cm = confusion_matrix(y_test, y_pred, labels=['negatif', 'netral', 'positif'])
-    report = classification_report(y_test, y_pred, output_dict=True)
+    report = classification_report(y_test, y_pred, output_dict=True, zero_division=0)
+
+    # Menghitung Distribusi untuk Plot
+    temp_df = df.groupby('sentimen').count()['content'].reset_index()
+    temp_df.columns = ['Sentimen', 'Jumlah']
+    temp_df['Percentage'] = (temp_df['Jumlah'] / temp_df['Jumlah'].sum()) * 100
 
     # Siapkan Teks Wordcloud
     pos = " ".join(df[df['sentimen'] == 'positif']['final_text'])
@@ -105,7 +117,7 @@ def load_and_evaluate():
 
 temp_df, positive_text, neutral_text, negative_text, cm, report = load_and_evaluate()
 
-# --- 6. Streamlit UI ---
+# --- 6. Streamlit UI Layout ---
 st.set_page_config(page_title="Grab Sentiment Analysis", layout="wide")
 st.title("Aplikasi Analisis Sentimen Ulasan Grab")
 
@@ -142,6 +154,7 @@ st.divider()
 
 # Section: Confusion Matrix
 st.header("Evaluasi Model: Confusion Matrix")
+
 col_cm, col_met = st.columns([2, 1])
 
 with col_cm:

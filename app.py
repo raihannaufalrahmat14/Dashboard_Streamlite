@@ -6,41 +6,110 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from wordcloud import WordCloud
 
+from sklearn.metrics import confusion_matrix, accuracy_score, classification_report
+
+import nltk
 from nltk.corpus import stopwords
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
-import nltk
 
-# =============================
+
+# ====================================
 # PAGE CONFIG
-# =============================
+# ====================================
+
 st.set_page_config(
-    page_title="Analisis Sentimen Grab",
+    page_title="Dashboard Analisis Sentimen Grab",
+    page_icon="📊",
     layout="wide"
 )
 
-# =============================
-# DOWNLOAD STOPWORDS ONLY
-# =============================
+
+# ====================================
+# SIDEBAR PROFESIONAL
+# ====================================
+
+st.sidebar.title("📊 Dashboard Analisis Sentimen")
+
+st.sidebar.markdown("---")
+
+st.sidebar.header("📌 Tentang Sistem")
+
+st.sidebar.write("""
+Sistem ini digunakan untuk melakukan analisis sentimen
+terhadap ulasan pengguna aplikasi Grab menggunakan
+algoritma Support Vector Machine (SVM).
+
+Klasifikasi sentimen:
+
+• Positif  
+• Netral  
+• Negatif
+""")
+
+st.sidebar.markdown("---")
+
+st.sidebar.header("⚙️ Metode")
+
+st.sidebar.write("""
+Algoritma : Support Vector Machine (SVM)  
+Feature Extraction : TF-IDF  
+Bahasa : Python  
+Framework : Streamlit
+""")
+
+st.sidebar.markdown("---")
+
+st.sidebar.header("📑 Menu Navigasi")
+
+menu = st.sidebar.radio(
+    "Pilih Menu:",
+    (
+        "Prediksi Sentimen",
+        "Evaluasi Model",
+        "Visualisasi Dataset"
+    )
+)
+
+st.sidebar.markdown("---")
+
+st.sidebar.header("👨‍🎓 Informasi Pengembang")
+
+st.sidebar.write("""
+Nama : Raihan Kimo  
+Penelitian : Analisis Sentimen Grab  
+Metode : Support Vector Machine  
+""")
+
+st.sidebar.markdown("---")
+
+st.sidebar.info("Streamlit Sentiment Analysis v1.0")
+
+
+# ====================================
+# LOAD NLP
+# ====================================
+
 @st.cache_resource
-def load_stopwords():
+def load_nlp():
+
     nltk.download('stopwords')
-    return set(stopwords.words('indonesian'))
 
-stop_words = load_stopwords()
+    stop_words = set(stopwords.words('indonesian'))
 
-# =============================
-# STEMMER
-# =============================
-@st.cache_resource
-def load_stemmer():
     factory = StemmerFactory()
-    return factory.create_stemmer()
 
-stemmer = load_stemmer()
+    stemmer = factory.create_stemmer()
 
-# =============================
-# CLEANING
-# =============================
+    return stop_words, stemmer
+
+
+stop_words, stemmer = load_nlp()
+
+
+# ====================================
+# PREPROCESSING
+# ====================================
+
 def cleaning(text):
 
     text = str(text).lower()
@@ -53,10 +122,8 @@ def cleaning(text):
 
     return text
 
-# =============================
-# PREPROCESS (NO NLTK TOKENIZER)
-# =============================
-def preprocess_text(text):
+
+def preprocess(text):
 
     text = cleaning(text)
 
@@ -68,182 +135,193 @@ def preprocess_text(text):
 
     return " ".join(tokens)
 
-# =============================
+
+# ====================================
 # LOAD MODEL
-# =============================
+# ====================================
+
 @st.cache_resource
 def load_model():
 
-    try:
+    model = joblib.load("best_svm_model.pkl")
 
-        model = joblib.load("best_svm_model.pkl")
+    vectorizer = joblib.load("tfidf_vectorizer.pkl")
 
-        vectorizer = joblib.load("tfidf_vectorizer.pkl")
+    return model, vectorizer
 
-        return model, vectorizer
-
-    except:
-
-        st.error("File model tidak ditemukan")
-
-        st.stop()
 
 model, vectorizer = load_model()
 
-# =============================
-# LOAD DATASET
-# =============================
-@st.cache_data
-def load_data():
 
-    try:
+# ====================================
+# TITLE
+# ====================================
 
-        df = pd.read_csv("grab_reviews.csv", sep=";", encoding="latin1")
+st.title("📊 Sistem Analisis Sentimen Ulasan Grab")
 
-    except:
+st.write("""
+Aplikasi ini mengklasifikasikan sentimen ulasan pengguna
+aplikasi Grab menggunakan algoritma Support Vector Machine (SVM).
+""")
 
-        st.error("File grab_reviews.csv tidak ditemukan")
 
-        st.stop()
+# ====================================
+# MENU 1: PREDIKSI
+# ====================================
 
-    df['clean_text'] = df['content'].apply(preprocess_text)
+if menu == "Prediksi Sentimen":
+
+    st.header("Prediksi Sentimen")
+
+    text = st.text_area("Masukkan ulasan pengguna:")
+
+    if st.button("Prediksi Sentimen"):
+
+        if text == "":
+
+            st.warning("Masukkan teks terlebih dahulu")
+
+        else:
+
+            processed = preprocess(text)
+
+            vector = vectorizer.transform([processed])
+
+            prediction = model.predict(vector)[0]
+
+            if prediction == "positif":
+
+                st.success("Hasil Prediksi: POSITIF")
+
+            elif prediction == "netral":
+
+                st.info("Hasil Prediksi: NETRAL")
+
+            else:
+
+                st.error("Hasil Prediksi: NEGATIF")
+
+
+# ====================================
+# MENU 2: EVALUASI MODEL
+# ====================================
+
+elif menu == "Evaluasi Model":
+
+    st.header("Evaluasi Model")
+
+    df = pd.read_csv("grab_reviews.csv", sep=";", encoding="latin1")
+
+    df["clean"] = df["content"].apply(preprocess)
+
+    X = vectorizer.transform(df["clean"])
 
     def label(score):
 
         if score <= 2:
-
             return "negatif"
 
         elif score == 3:
-
             return "netral"
 
         else:
-
             return "positif"
 
-    df['sentimen'] = df['score'].apply(label)
+    y_true = df["score"].apply(label)
 
-    summary = df['sentimen'].value_counts().reset_index()
+    y_pred = model.predict(X)
 
-    summary.columns = ["Sentimen", "Jumlah"]
+    accuracy = accuracy_score(y_true, y_pred)
 
-    summary["Persentase"] = summary["Jumlah"] / summary["Jumlah"].sum() * 100
+    st.subheader("Akurasi Model")
 
-    positif = " ".join(df[df.sentimen=="positif"].clean_text)
+    st.success(f"Akurasi: {accuracy:.2f}")
 
-    netral = " ".join(df[df.sentimen=="netral"].clean_text)
+    st.subheader("Confusion Matrix")
 
-    negatif = " ".join(df[df.sentimen=="negatif"].clean_text)
-
-    return summary, positif, netral, negatif
-
-summary, positif_text, netral_text, negatif_text = load_data()
-
-# =============================
-# TITLE
-# =============================
-st.title("📊 Aplikasi Analisis Sentimen Ulasan Grab Menggunakan SVM")
-
-st.write("Model Support Vector Machine digunakan untuk mengklasifikasikan sentimen ulasan pengguna aplikasi Grab.")
-
-# =============================
-# INPUT PREDIKSI
-# =============================
-st.header("Prediksi Sentimen")
-
-user_input = st.text_area("Masukkan teks ulasan:")
-
-if st.button("Prediksi"):
-
-    if user_input == "":
-
-        st.warning("Masukkan teks terlebih dahulu")
-
-    else:
-
-        processed = preprocess_text(user_input)
-
-        vector = vectorizer.transform([processed])
-
-        hasil = model.predict(vector)[0]
-
-        if hasil == "positif":
-
-            st.success("Sentimen: POSITIF")
-
-        elif hasil == "netral":
-
-            st.info("Sentimen: NETRAL")
-
-        else:
-
-            st.error("Sentimen: NEGATIF")
-
-# =============================
-# VISUALISASI
-# =============================
-st.header("Visualisasi Distribusi Sentimen")
-
-col1, col2 = st.columns(2)
-
-# BAR CHART
-with col1:
+    cm = confusion_matrix(y_true, y_pred)
 
     fig, ax = plt.subplots()
 
-    sns.barplot(x="Sentimen", y="Jumlah", data=summary, ax=ax)
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt="d",
+        cmap="Blues",
+        xticklabels=["negatif", "netral", "positif"],
+        yticklabels=["negatif", "netral", "positif"]
+    )
 
-    ax.set_title("Distribusi Sentimen")
+    ax.set_xlabel("Prediksi")
+
+    ax.set_ylabel("Aktual")
 
     st.pyplot(fig)
 
-# DONUT CHART
-with col2:
+    st.subheader("Classification Report")
+
+    report = classification_report(y_true, y_pred)
+
+    st.text(report)
+
+
+# ====================================
+# MENU 3: VISUALISASI DATASET
+# ====================================
+
+elif menu == "Visualisasi Dataset":
+
+    st.header("Visualisasi Dataset")
+
+    df = pd.read_csv("grab_reviews.csv", sep=";", encoding="latin1")
+
+    def label(score):
+
+        if score <= 2:
+            return "negatif"
+
+        elif score == 3:
+            return "netral"
+
+        else:
+            return "positif"
+
+    df["sentimen"] = df["score"].apply(label)
+
+    summary = df["sentimen"].value_counts()
+
+    st.subheader("Distribusi Sentimen")
 
     fig, ax = plt.subplots()
 
-    ax.pie(summary["Persentase"], autopct="%1.1f%%")
+    sns.barplot(
+        x=summary.index,
+        y=summary.values,
+        palette="viridis"
+    )
 
-    centre = plt.Circle((0,0),0.70,fc="white")
+    ax.set_xlabel("Sentimen")
 
-    fig.gca().add_artist(centre)
-
-    ax.set_title("Persentase Sentimen")
+    ax.set_ylabel("Jumlah")
 
     st.pyplot(fig)
 
-# =============================
-# WORDCLOUD
-# =============================
-st.header("WordCloud")
+    st.subheader("WordCloud")
 
-c1, c2, c3 = st.columns(3)
+    df["clean"] = df["content"].apply(preprocess)
 
-def tampil_wordcloud(text, title, col):
+    text = " ".join(df["clean"])
 
-    with col:
+    wc = WordCloud(
+        width=800,
+        height=400,
+        background_color="white"
+    ).generate(text)
 
-        st.subheader(title)
+    fig, ax = plt.subplots()
 
-        if text == "":
+    ax.imshow(wc)
 
-            st.write("Tidak ada data")
+    ax.axis("off")
 
-        else:
-
-            wc = WordCloud(width=400, height=200, background_color="white").generate(text)
-
-            fig, ax = plt.subplots()
-
-            ax.imshow(wc)
-
-            ax.axis("off")
-
-            st.pyplot(fig)
-
-tampil_wordcloud(positif_text, "Positif", c1)
-
-tampil_wordcloud(netral_text, "Netral", c2)
-
-tampil_wordcloud(negatif_text, "Negatif", c3)
+    st.pyplot(fig)

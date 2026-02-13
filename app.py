@@ -13,12 +13,20 @@ import os
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, classification_report
 
-# --- NLTK Data Downloads ---
-if not os.path.exists(nltk.data.find('tokenizers/punkt')):
-    nltk.download('punkt')
+# --- NLTK Data Downloads (Perbaikan Error) ---
+def download_nltk_resources():
+    resources = {
+        'tokenizers/punkt': 'punkt',
+        'tokenizers/punkt_tab': 'punkt_tab',
+        'corpora/stopwords': 'stopwords'
+    }
+    for path, resource in resources.items():
+        try:
+            nltk.data.find(path)
+        except LookupError:
+            nltk.download(resource)
 
-if not os.path.exists(nltk.data.find('corpora/stopwords')):
-    nltk.download('stopwords')
+download_nltk_resources()
 
 # --- Global Initializations ---
 stop_words = set(stopwords.words('indonesian'))
@@ -41,12 +49,17 @@ def preprocess_text(text):
     return ' '.join(stemmed_tokens)
 
 # --- Load Model and TF-IDF Vectorizer ---
-try:
-    best_svm_model = joblib.load('best_svm_model.pkl')
-    tfidf_vectorizer = joblib.load('tfidf_vectorizer.pkl')
-except FileNotFoundError:
-    st.error("Error: Model or TF-IDF vectorizer files not found. Please ensure 'best_svm_model.pkl' and 'tfidf_vectorizer.pkl' are in the same directory.")
-    st.stop()
+@st.cache_resource
+def load_ml_models():
+    try:
+        model = joblib.load('best_svm_model.pkl')
+        vectorizer = joblib.load('tfidf_vectorizer.pkl')
+        return model, vectorizer
+    except FileNotFoundError:
+        st.error("Error: Model or TF-IDF vectorizer files not found. Please ensure 'best_svm_model.pkl' and 'tfidf_vectorizer.pkl' are in the same directory.")
+        st.stop()
+
+best_svm_model, tfidf_vectorizer = load_ml_models()
 
 # --- Load Data, Prepare Visualizations, and Evaluate ---
 @st.cache_data

@@ -326,4 +326,3 @@ elif menu == "Visualisasi Dataset":
 
     st.pyplot(fig)
 
-f

@@ -1,291 +1,195 @@
-import streamlit as st
-import joblib
+# ============================================
+# IMPORT LIBRARY
+# ============================================
+
 import pandas as pd
 import re
-import matplotlib.pyplot as plt
-import seaborn as sns
-from wordcloud import WordCloud
-
-from sklearn.metrics import confusion_matrix, accuracy_score, classification_report
+import joblib
 
 import nltk
 from nltk.corpus import stopwords
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.svm import LinearSVC
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
-# ====================================
-# PAGE CONFIG
-# ====================================
-
-st.set_page_config(
-    page_title="Dashboard Analisis Sentimen Grab",
-    page_icon="📊",
-    layout="wide"
-)
+from imblearn.over_sampling import SMOTE
 
 
-# ====================================
-# SIDEBAR
-# ====================================
+# ============================================
+# DOWNLOAD STOPWORDS
+# ============================================
 
-st.sidebar.title("📊 Dashboard Analisis Sentimen")
+nltk.download('stopwords')
 
-menu = st.sidebar.radio(
-    "Menu Navigasi",
-    (
-        "Prediksi Sentimen",
-        "Evaluasi Model",
-        "Visualisasi Dataset"
-    )
-)
+stop_words = set(stopwords.words('indonesian'))
 
-st.sidebar.markdown("---")
-st.sidebar.info("Streamlit Sentiment Analysis v1.0")
+factory = StemmerFactory()
+stemmer = factory.create_stemmer()
 
 
-# ====================================
-# LOAD NLP
-# ====================================
+# ============================================
+# LOAD DATASET
+# ============================================
 
-@st.cache_resource
-def load_nlp():
-    nltk.download('stopwords')
-    stop_words = set(stopwords.words('indonesian'))
-    factory = StemmerFactory()
-    stemmer = factory.create_stemmer()
-    return stop_words, stemmer
+df = pd.read_csv("grab_reviews.csv", sep=";", encoding="latin1")
 
-stop_words, stemmer = load_nlp()
+print("Jumlah data:", len(df))
 
 
-# ====================================
+# ============================================
+# LABELING SENTIMEN
+# ============================================
+
+def label(score):
+
+    if score <= 2:
+        return "negatif"
+
+    elif score == 3:
+        return "netral"
+
+    else:
+        return "positif"
+
+
+df["sentimen"] = df["score"].apply(label)
+
+
+print("\nDistribusi Sentimen:")
+print(df["sentimen"].value_counts())
+
+
+# ============================================
 # PREPROCESSING
-# ====================================
+# ============================================
 
 def cleaning(text):
+
     text = str(text).lower()
+
     text = re.sub(r'http\S+', '', text)
+
     text = re.sub(r'[^a-z\s]', '', text)
+
     text = re.sub(r'\s+', ' ', text).strip()
+
     return text
 
+
 def preprocess(text):
+
     text = cleaning(text)
+
     tokens = text.split()
+
     tokens = [word for word in tokens if word not in stop_words]
+
     tokens = [stemmer.stem(word) for word in tokens]
+
     return " ".join(tokens)
 
 
-# ====================================
-# LOAD MODEL
-# ====================================
+df["clean"] = df["content"].apply(preprocess)
 
-@st.cache_resource
-def load_model():
-    model = joblib.load("best_svm_model.pkl")
-    vectorizer = joblib.load("tfidf_vectorizer.pkl")
-    return model, vectorizer
 
-model, vectorizer = load_model()
+# ============================================
+# TF-IDF (BIGRAM)
+# ============================================
 
+vectorizer = TfidfVectorizer(
 
-# ====================================
-# TITLE
-# ====================================
+    max_features=5000,
+    ngram_range=(1,2)
 
-st.title("📊 Sistem Analisis Sentimen Ulasan Grab (SVM)")
+)
 
+X = vectorizer.fit_transform(df["clean"])
 
-# ====================================
-# MENU 1: PREDIKSI
-# ====================================
+y = df["sentimen"]
 
-if menu == "Prediksi Sentimen":
 
-    st.header("Prediksi Sentimen")
+# ============================================
+# SPLIT DATA
+# ============================================
 
-    text = st.text_area("Masukkan ulasan:")
+X_train, X_test, y_train, y_test = train_test_split(
 
-    if st.button("Prediksi"):
+    X,
+    y,
+    test_size=0.2,
+    random_state=42,
+    stratify=y
 
-        if text == "":
-            st.warning("Masukkan teks terlebih dahulu")
-        else:
+)
 
-            processed = preprocess(text)
-            vector = vectorizer.transform([processed])
-            prediction = model.predict(vector)[0]
-            prediction = str(prediction).lower()
 
-            if prediction == "positif":
-                st.success("Sentimen: POSITIF")
+print("\nJumlah data training:", len(y_train))
+print("Jumlah data testing:", len(y_test))
 
-            elif prediction == "netral":
-                st.info("Sentimen: NETRAL")
 
-            else:
-                st.error("Sentimen: NEGATIF")
+# ============================================
+# SMOTE BALANCING
+# ============================================
 
+print("\nSebelum SMOTE:")
+print(y_train.value_counts())
 
-# ====================================
-# MENU 2: EVALUASI MODEL
-# ====================================
+smote = SMOTE(random_state=42)
 
-elif menu == "Evaluasi Model":
+X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
 
-    st.header("Evaluasi Model")
+print("\nSesudah SMOTE:")
+print(pd.Series(y_train_smote).value_counts())
 
-    df = pd.read_csv("grab_reviews.csv", sep=";", encoding="latin1")
 
-    def label(score):
-        if score <= 2:
-            return "negatif"
-        elif score == 3:
-            return "netral"
-        else:
-            return "positif"
+# ============================================
+# TRAIN MODEL (LinearSVC terbaik untuk teks)
+# ============================================
 
-    df["sentimen"] = df["score"].apply(label)
+model = LinearSVC(
 
-    df["clean"] = df["content"].apply(preprocess)
+    class_weight='balanced',
+    max_iter=10000
 
-    X = vectorizer.transform(df["clean"])
+)
 
-    y_true = df["sentimen"].astype(str).str.lower()
-    y_pred = model.predict(X)
-    y_pred = pd.Series(y_pred).astype(str).str.lower()
+model.fit(X_train_smote, y_train_smote)
 
-    labels_order = ["negatif", "netral", "positif"]
 
-    # ACCURACY
-    acc = accuracy_score(y_true, y_pred)
+# ============================================
+# TEST MODEL
+# ============================================
 
-    st.subheader("Akurasi")
-    st.success(f"{acc:.2f}")
+y_pred = model.predict(X_test)
 
 
-    # CONFUSION MATRIX
-    st.subheader("Confusion Matrix")
+# ============================================
+# EVALUASI
+# ============================================
 
-    cm = confusion_matrix(
-        y_true,
-        y_pred,
-        labels=labels_order
-    )
+accuracy = accuracy_score(y_test, y_pred)
 
-    fig, ax = plt.subplots()
+print("\nAccuracy:", accuracy)
 
-    sns.heatmap(
-        cm,
-        annot=True,
-        fmt="d",
-        cmap="Blues",
-        xticklabels=labels_order,
-        yticklabels=labels_order
-    )
 
-    ax.set_xlabel("Prediksi")
-    ax.set_ylabel("Aktual")
+print("\nClassification Report:")
+print(classification_report(y_test, y_pred))
 
-    st.pyplot(fig)
 
+print("\nConfusion Matrix:")
+print(confusion_matrix(y_test, y_pred))
 
-    # CLASSIFICATION REPORT FIX
-    st.subheader("Classification Report")
 
-    report = classification_report(
-        y_true,
-        y_pred,
-        labels=labels_order,
-        target_names=labels_order,
-        zero_division=0
-    )
+# ============================================
+# SIMPAN MODEL
+# ============================================
 
-    st.text(report)
+joblib.dump(model, "best_svm_model.pkl")
 
+joblib.dump(vectorizer, "tfidf_vectorizer.pkl")
 
-# ====================================
-# MENU 3: VISUALISASI
-# ====================================
 
-elif menu == "Visualisasi Dataset":
-
-    st.header("Visualisasi Dataset")
-
-    df = pd.read_csv("grab_reviews.csv", sep=";", encoding="latin1")
-
-    def label(score):
-        if score <= 2:
-            return "negatif"
-        elif score == 3:
-            return "netral"
-        else:
-            return "positif"
-
-    df["sentimen"] = df["score"].apply(label)
-
-    summary = df["sentimen"].value_counts()
-
-    col1, col2 = st.columns(2)
-
-    # BAR CHART
-    with col1:
-
-        st.subheader("Distribusi Sentimen")
-
-        fig, ax = plt.subplots()
-
-        sns.barplot(
-            x=summary.index,
-            y=summary.values
-        )
-
-        st.pyplot(fig)
-
-
-    # DONUT CHART
-    with col2:
-
-        st.subheader("Donut Chart")
-
-        fig, ax = plt.subplots()
-
-        wedges, texts, autotexts = ax.pie(
-            summary.values,
-            labels=summary.index,
-            autopct="%1.1f%%",
-            wedgeprops=dict(width=0.4)
-        )
-
-        ax.set_aspect("equal")
-
-        st.pyplot(fig)
-
-
-    # WORDCLOUD PER SENTIMEN
-    st.subheader("WordCloud per Sentimen")
-
-    df["clean"] = df["content"].apply(preprocess)
-
-    col1, col2, col3 = st.columns(3)
-
-    for sentimen, col in zip(["positif", "netral", "negatif"], [col1, col2, col3]):
-
-        text = " ".join(df[df["sentimen"] == sentimen]["clean"])
-
-        if text.strip() != "":
-
-            wc = WordCloud(
-                width=400,
-                height=300,
-                background_color="white"
-            ).generate(text)
-
-            fig, ax = plt.subplots()
-
-            ax.imshow(wc)
-            ax.axis("off")
-
-            col.subheader(sentimen.upper())
-            col.pyplot(fig)
+print("\nModel berhasil disimpan!")

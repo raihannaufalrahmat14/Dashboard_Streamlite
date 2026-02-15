@@ -210,36 +210,46 @@ elif menu == "Evaluasi Model":
 
     st.header("Evaluasi Model")
 
+    # Load dataset
     df = pd.read_csv("grab_reviews.csv", sep=";", encoding="latin1")
 
+    # Preprocessing
     df["clean"] = df["content"].apply(preprocess)
 
     X = vectorizer.transform(df["clean"])
 
+    # Konversi skor menjadi label sentimen
     def label(score):
-
         if score <= 2:
             return "negatif"
-
         elif score == 3:
             return "netral"
-
         else:
             return "positif"
 
     y_true = df["score"].apply(label)
-
     y_pred = model.predict(X)
 
+    # ================================
+    # AKURASI
+    # ================================
     accuracy = accuracy_score(y_true, y_pred)
 
     st.subheader("Akurasi Model")
+    st.success(f"Akurasi Model SVM: {accuracy:.2f}")
 
-    st.success(f"Akurasi: {accuracy:.2f}")
-
+    # ================================
+    # CONFUSION MATRIX (FIXED)
+    # ================================
     st.subheader("Confusion Matrix")
 
-    cm = confusion_matrix(y_true, y_pred)
+    labels_order = ["negatif", "netral", "positif"]
+
+    cm = confusion_matrix(
+        y_true,
+        y_pred,
+        labels=labels_order
+    )
 
     fig, ax = plt.subplots()
 
@@ -248,19 +258,26 @@ elif menu == "Evaluasi Model":
         annot=True,
         fmt="d",
         cmap="Blues",
-        xticklabels=["negatif", "netral", "positif"],
-        yticklabels=["negatif", "netral", "positif"]
+        xticklabels=labels_order,
+        yticklabels=labels_order
     )
 
     ax.set_xlabel("Prediksi")
-
     ax.set_ylabel("Aktual")
+    ax.set_title("Confusion Matrix SVM")
 
     st.pyplot(fig)
 
+    # ================================
+    # CLASSIFICATION REPORT (FIXED)
+    # ================================
     st.subheader("Classification Report")
 
-    report = classification_report(y_true, y_pred)
+    report = classification_report(
+        y_true,
+        y_pred,
+        labels=labels_order
+    )
 
     st.text(report)
 
@@ -325,4 +342,5 @@ elif menu == "Visualisasi Dataset":
     ax.axis("off")
 
     st.pyplot(fig)
+
 

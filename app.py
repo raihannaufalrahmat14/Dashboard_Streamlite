@@ -23,6 +23,7 @@ st.set_page_config(
     layout="wide"
 )
 
+
 # ====================================
 # SIDEBAR
 # ====================================
@@ -39,7 +40,7 @@ menu = st.sidebar.radio(
 )
 
 st.sidebar.markdown("---")
-st.sidebar.info("Streamlit Sentiment Analysis v2.0")
+st.sidebar.info("Streamlit Sentiment Analysis v1.0")
 
 
 # ====================================
@@ -77,7 +78,7 @@ def preprocess(text):
 
 
 # ====================================
-# LOAD MODEL & VECTORIZER
+# LOAD MODEL
 # ====================================
 
 @st.cache_resource
@@ -104,19 +105,18 @@ if menu == "Prediksi Sentimen":
 
     st.header("Prediksi Sentimen")
 
-    text_input = st.text_area("Masukkan ulasan:")
+    text = st.text_area("Masukkan ulasan:")
 
     if st.button("Prediksi"):
 
-        if text_input.strip() == "":
+        if text == "":
             st.warning("Masukkan teks terlebih dahulu")
         else:
-            processed = preprocess(text_input)
+
+            processed = preprocess(text)
             vector = vectorizer.transform([processed])
             prediction = model.predict(vector)[0]
-            prediction = str(prediction).lower().strip()
-
-            st.subheader("Hasil Prediksi")
+            prediction = str(prediction).lower()
 
             if prediction == "positif":
                 st.success("Sentimen: POSITIF")
@@ -124,11 +124,8 @@ if menu == "Prediksi Sentimen":
             elif prediction == "netral":
                 st.info("Sentimen: NETRAL")
 
-            elif prediction == "negatif":
-                st.error("Sentimen: NEGATIF")
-
             else:
-                st.warning(f"Label tidak dikenali: {prediction}")
+                st.error("Sentimen: NEGATIF")
 
 
 # ====================================
@@ -141,7 +138,6 @@ elif menu == "Evaluasi Model":
 
     df = pd.read_csv("grab_reviews.csv", sep=";", encoding="latin1")
 
-    # Labeling berdasarkan rating
     def label(score):
         if score <= 2:
             return "negatif"
@@ -151,11 +147,14 @@ elif menu == "Evaluasi Model":
             return "positif"
 
     df["sentimen"] = df["score"].apply(label)
+
     df["clean"] = df["content"].apply(preprocess)
 
     X = vectorizer.transform(df["clean"])
-    y_true = df["sentimen"].astype(str).str.lower().str.strip()
-    y_pred = pd.Series(model.predict(X)).astype(str).str.lower().str.strip()
+
+    y_true = df["sentimen"].astype(str).str.lower()
+    y_pred = model.predict(X)
+    y_pred = pd.Series(y_pred).astype(str).str.lower()
 
     labels_order = ["negatif", "netral", "positif"]
 
@@ -163,7 +162,8 @@ elif menu == "Evaluasi Model":
     acc = accuracy_score(y_true, y_pred)
 
     st.subheader("Akurasi")
-    st.success(f"{acc:.4f}")
+    st.success(f"{acc:.2f}")
+
 
     # CONFUSION MATRIX
     st.subheader("Confusion Matrix")
@@ -190,7 +190,8 @@ elif menu == "Evaluasi Model":
 
     st.pyplot(fig)
 
-    # CLASSIFICATION REPORT
+
+    # CLASSIFICATION REPORT FIX
     st.subheader("Classification Report")
 
     report = classification_report(
@@ -230,19 +231,27 @@ elif menu == "Visualisasi Dataset":
 
     # BAR CHART
     with col1:
+
         st.subheader("Distribusi Sentimen")
 
         fig, ax = plt.subplots()
-        sns.barplot(x=summary.index, y=summary.values)
+
+        sns.barplot(
+            x=summary.index,
+            y=summary.values
+        )
+
         st.pyplot(fig)
+
 
     # DONUT CHART
     with col2:
+
         st.subheader("Donut Chart")
 
         fig, ax = plt.subplots()
 
-        ax.pie(
+        wedges, texts, autotexts = ax.pie(
             summary.values,
             labels=summary.index,
             autopct="%1.1f%%",
@@ -250,9 +259,11 @@ elif menu == "Visualisasi Dataset":
         )
 
         ax.set_aspect("equal")
+
         st.pyplot(fig)
 
-    # WORDCLOUD
+
+    # WORDCLOUD PER SENTIMEN
     st.subheader("WordCloud per Sentimen")
 
     df["clean"] = df["content"].apply(preprocess)
@@ -261,16 +272,18 @@ elif menu == "Visualisasi Dataset":
 
     for sentimen, col in zip(["positif", "netral", "negatif"], [col1, col2, col3]):
 
-        text_data = " ".join(df[df["sentimen"] == sentimen]["clean"])
+        text = " ".join(df[df["sentimen"] == sentimen]["clean"])
 
-        if text_data.strip() != "":
+        if text.strip() != "":
+
             wc = WordCloud(
                 width=400,
                 height=300,
                 background_color="white"
-            ).generate(text_data)
+            ).generate(text)
 
             fig, ax = plt.subplots()
+
             ax.imshow(wc)
             ax.axis("off")
 

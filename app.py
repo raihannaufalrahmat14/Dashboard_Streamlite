@@ -35,8 +35,8 @@ st.sidebar.markdown("---")
 st.sidebar.header("📌 Tentang Sistem")
 st.sidebar.write("""
 Sistem ini digunakan untuk melakukan analisis sentimen
-terhadap ulasan pengguna aplikasi Grab menggunakan
-algoritma Support Vector Machine (SVM).
+ulasan pengguna aplikasi Grab menggunakan algoritma
+Support Vector Machine (SVM).
 
 Klasifikasi sentimen:
 • Positif  
@@ -46,20 +46,8 @@ Klasifikasi sentimen:
 
 st.sidebar.markdown("---")
 
-st.sidebar.header("⚙️ Metode")
-st.sidebar.write("""
-Algoritma : Support Vector Machine (SVM)  
-Feature Extraction : TF-IDF  
-Bahasa : Python  
-Framework : Streamlit
-""")
-
-st.sidebar.markdown("---")
-
-st.sidebar.header("📑 Menu Navigasi")
-
 menu = st.sidebar.radio(
-    "Pilih Menu:",
+    "📑 Menu Navigasi",
     (
         "Prediksi Sentimen",
         "Evaluasi Model",
@@ -69,14 +57,6 @@ menu = st.sidebar.radio(
 
 st.sidebar.markdown("---")
 
-st.sidebar.header("👨‍🎓 Informasi Pengembang")
-st.sidebar.write("""
-Nama : Raihan Kimo  
-Penelitian : Analisis Sentimen Grab  
-Metode : Support Vector Machine  
-""")
-
-st.sidebar.markdown("---")
 st.sidebar.info("Streamlit Sentiment Analysis v1.0")
 
 
@@ -128,14 +108,23 @@ model, vectorizer = load_model()
 
 
 # ====================================
+# LABEL FUNCTION
+# ====================================
+
+def label(score):
+    if score <= 2:
+        return "negatif"
+    elif score == 3:
+        return "netral"
+    else:
+        return "positif"
+
+
+# ====================================
 # TITLE
 # ====================================
 
 st.title("📊 Sistem Analisis Sentimen Ulasan Grab")
-st.write("""
-Aplikasi ini mengklasifikasikan sentimen ulasan pengguna
-aplikasi Grab menggunakan algoritma Support Vector Machine (SVM).
-""")
 
 
 # ====================================
@@ -148,7 +137,7 @@ if menu == "Prediksi Sentimen":
 
     text = st.text_area("Masukkan ulasan pengguna:")
 
-    if st.button("Prediksi Sentimen"):
+    if st.button("Prediksi"):
 
         if text == "":
             st.warning("Masukkan teks terlebih dahulu")
@@ -156,7 +145,6 @@ if menu == "Prediksi Sentimen":
             processed = preprocess(text)
             vector = vectorizer.transform([processed])
             prediction = model.predict(vector)[0]
-            prediction = str(prediction).lower()
 
             if prediction == "positif":
                 st.success("Hasil Prediksi: POSITIF")
@@ -179,30 +167,19 @@ elif menu == "Evaluasi Model":
     df["clean"] = df["content"].apply(preprocess)
     X = vectorizer.transform(df["clean"])
 
-    def label(score):
-        if score <= 2:
-            return "negatif"
-        elif score == 3:
-            return "netral"
-        else:
-            return "positif"
-
-    y_true = df["score"].apply(label).astype(str).str.lower()
+    y_true = df["score"].apply(label)
     y_pred = model.predict(X)
-    y_pred = pd.Series(y_pred).astype(str).str.lower()
 
-    # Akurasi
     accuracy = accuracy_score(y_true, y_pred)
 
     st.subheader("Akurasi Model")
-    st.success(f"Akurasi Model SVM: {accuracy:.2f}")
+    st.success(f"Akurasi Model: {accuracy:.2%}")
 
-    # Confusion Matrix
     st.subheader("Confusion Matrix")
 
-    labels_order = ["negatif", "netral", "positif"]
+    labels = ["negatif", "netral", "positif"]
 
-    cm = confusion_matrix(y_true, y_pred, labels=labels_order)
+    cm = confusion_matrix(y_true, y_pred, labels=labels)
 
     fig, ax = plt.subplots()
 
@@ -211,25 +188,18 @@ elif menu == "Evaluasi Model":
         annot=True,
         fmt="d",
         cmap="Blues",
-        xticklabels=labels_order,
-        yticklabels=labels_order
+        xticklabels=labels,
+        yticklabels=labels
     )
 
     ax.set_xlabel("Prediksi")
     ax.set_ylabel("Aktual")
-    ax.set_title("Confusion Matrix SVM")
 
     st.pyplot(fig)
 
-    # Classification Report
     st.subheader("Classification Report")
 
-    report = classification_report(
-        y_true,
-        y_pred,
-        labels=labels_order
-    )
-
+    report = classification_report(y_true, y_pred, target_names=labels)
     st.text(report)
 
 
@@ -243,19 +213,15 @@ elif menu == "Visualisasi Dataset":
 
     df = pd.read_csv("grab_reviews.csv", sep=";", encoding="latin1")
 
-    def label(score):
-        if score <= 2:
-            return "negatif"
-        elif score == 3:
-            return "netral"
-        else:
-            return "positif"
-
     df["sentimen"] = df["score"].apply(label)
 
     summary = df["sentimen"].value_counts()
 
-    st.subheader("Distribusi Sentimen")
+    # ================================
+    # BAR CHART
+    # ================================
+
+    st.subheader("Distribusi Sentimen (Bar Chart)")
 
     fig, ax = plt.subplots()
 
@@ -270,20 +236,69 @@ elif menu == "Visualisasi Dataset":
 
     st.pyplot(fig)
 
-    st.subheader("WordCloud")
+    # ================================
+    # DONUT PLOT (BARU)
+    # ================================
+
+    st.subheader("Distribusi Sentimen (Donut Plot)")
+
+    fig2, ax2 = plt.subplots()
+
+    colors = ["#ff6b6b", "#feca57", "#1dd1a1"]
+
+    wedges, texts, autotexts = ax2.pie(
+        summary.values,
+        labels=summary.index,
+        autopct='%1.1f%%',
+        startangle=90,
+        colors=colors
+    )
+
+    # Buat lubang tengah
+    centre_circle = plt.Circle((0,0),0.70,fc='white')
+    fig2.gca().add_artist(centre_circle)
+
+    ax2.axis('equal')
+
+    st.pyplot(fig2)
+
+    # ================================
+    # WORDCLOUD PER SENTIMEN
+    # ================================
+
+    st.subheader("WordCloud Berdasarkan Sentimen")
 
     df["clean"] = df["content"].apply(preprocess)
 
-    text = " ".join(df["clean"])
+    positif_text = " ".join(df[df["sentimen"]=="positif"]["clean"])
+    netral_text = " ".join(df[df["sentimen"]=="netral"]["clean"])
+    negatif_text = " ".join(df[df["sentimen"]=="negatif"]["clean"])
 
-    wc = WordCloud(
-        width=800,
-        height=400,
-        background_color="white"
-    ).generate(text)
+    col1, col2, col3 = st.columns(3)
 
-    fig, ax = plt.subplots()
-    ax.imshow(wc)
-    ax.axis("off")
+    with col1:
+        st.write("Positif")
+        if positif_text.strip() != "":
+            wc = WordCloud(width=400, height=300, background_color="white").generate(positif_text)
+            fig, ax = plt.subplots()
+            ax.imshow(wc)
+            ax.axis("off")
+            st.pyplot(fig)
 
-    st.pyplot(fig)
+    with col2:
+        st.write("Netral")
+        if netral_text.strip() != "":
+            wc = WordCloud(width=400, height=300, background_color="white").generate(netral_text)
+            fig, ax = plt.subplots()
+            ax.imshow(wc)
+            ax.axis("off")
+            st.pyplot(fig)
+
+    with col3:
+        st.write("Negatif")
+        if negatif_text.strip() != "":
+            wc = WordCloud(width=400, height=300, background_color="white").generate(negatif_text)
+            fig, ax = plt.subplots()
+            ax.imshow(wc)
+            ax.axis("off")
+            st.pyplot(fig)

@@ -33,7 +33,7 @@ st.sidebar.title("📊 Dashboard Analisis Sentimen")
 menu = st.sidebar.radio(
     "Menu Navigasi",
     (
-        "Prediksi Sentimen",
+        "Analisis Sentimen",
         "Evaluasi Model",
         "Visualisasi Dataset"
     )
@@ -98,16 +98,16 @@ st.title("📊 Sistem Analisis Sentimen Ulasan Grab (SVM)")
 
 
 # ====================================
-# MENU 1: PREDIKSI
+# MENU 1: ANALISIS
 # ====================================
 
-if menu == "Prediksi Sentimen":
+if menu == "Analisis Sentimen":
 
-    st.header("Prediksi Sentimen")
+    st.header("Analisis Sentimen")
 
     text = st.text_area("Masukkan ulasan:")
 
-    if st.button("Prediksi"):
+    if st.button("Analisis"):
 
         if text == "":
             st.warning("Masukkan teks terlebih dahulu")
@@ -185,7 +185,7 @@ elif menu == "Evaluasi Model":
         yticklabels=labels_order
     )
 
-    ax.set_xlabel("Prediksi")
+    ax.set_xlabel("Analisis")
     ax.set_ylabel("Aktual")
 
     st.pyplot(fig)

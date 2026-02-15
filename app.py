@@ -25,7 +25,7 @@ st.set_page_config(
 
 
 # ====================================
-# SIDEBAR PROFESIONAL
+# SIDEBAR
 # ====================================
 
 st.sidebar.title("📊 Dashboard Analisis Sentimen")
@@ -33,14 +33,12 @@ st.sidebar.title("📊 Dashboard Analisis Sentimen")
 st.sidebar.markdown("---")
 
 st.sidebar.header("📌 Tentang Sistem")
-
 st.sidebar.write("""
 Sistem ini digunakan untuk melakukan analisis sentimen
 terhadap ulasan pengguna aplikasi Grab menggunakan
 algoritma Support Vector Machine (SVM).
 
 Klasifikasi sentimen:
-
 • Positif  
 • Netral  
 • Negatif
@@ -49,7 +47,6 @@ Klasifikasi sentimen:
 st.sidebar.markdown("---")
 
 st.sidebar.header("⚙️ Metode")
-
 st.sidebar.write("""
 Algoritma : Support Vector Machine (SVM)  
 Feature Extraction : TF-IDF  
@@ -73,7 +70,6 @@ menu = st.sidebar.radio(
 st.sidebar.markdown("---")
 
 st.sidebar.header("👨‍🎓 Informasi Pengembang")
-
 st.sidebar.write("""
 Nama : Raihan Kimo  
 Penelitian : Analisis Sentimen Grab  
@@ -81,7 +77,6 @@ Metode : Support Vector Machine
 """)
 
 st.sidebar.markdown("---")
-
 st.sidebar.info("Streamlit Sentiment Analysis v1.0")
 
 
@@ -91,17 +86,11 @@ st.sidebar.info("Streamlit Sentiment Analysis v1.0")
 
 @st.cache_resource
 def load_nlp():
-
     nltk.download('stopwords')
-
     stop_words = set(stopwords.words('indonesian'))
-
     factory = StemmerFactory()
-
     stemmer = factory.create_stemmer()
-
     return stop_words, stemmer
-
 
 stop_words, stemmer = load_nlp()
 
@@ -111,28 +100,17 @@ stop_words, stemmer = load_nlp()
 # ====================================
 
 def cleaning(text):
-
     text = str(text).lower()
-
     text = re.sub(r'http\S+', '', text)
-
     text = re.sub(r'[^a-z\s]', '', text)
-
     text = re.sub(r'\s+', ' ', text).strip()
-
     return text
 
-
 def preprocess(text):
-
     text = cleaning(text)
-
     tokens = text.split()
-
     tokens = [word for word in tokens if word not in stop_words]
-
     tokens = [stemmer.stem(word) for word in tokens]
-
     return " ".join(tokens)
 
 
@@ -142,13 +120,9 @@ def preprocess(text):
 
 @st.cache_resource
 def load_model():
-
     model = joblib.load("best_svm_model.pkl")
-
     vectorizer = joblib.load("tfidf_vectorizer.pkl")
-
     return model, vectorizer
-
 
 model, vectorizer = load_model()
 
@@ -158,7 +132,6 @@ model, vectorizer = load_model()
 # ====================================
 
 st.title("📊 Sistem Analisis Sentimen Ulasan Grab")
-
 st.write("""
 Aplikasi ini mengklasifikasikan sentimen ulasan pengguna
 aplikasi Grab menggunakan algoritma Support Vector Machine (SVM).
@@ -178,27 +151,18 @@ if menu == "Prediksi Sentimen":
     if st.button("Prediksi Sentimen"):
 
         if text == "":
-
             st.warning("Masukkan teks terlebih dahulu")
-
         else:
-
             processed = preprocess(text)
-
             vector = vectorizer.transform([processed])
-
             prediction = model.predict(vector)[0]
+            prediction = str(prediction).lower()
 
             if prediction == "positif":
-
                 st.success("Hasil Prediksi: POSITIF")
-
             elif prediction == "netral":
-
                 st.info("Hasil Prediksi: NETRAL")
-
             else:
-
                 st.error("Hasil Prediksi: NEGATIF")
 
 
@@ -210,15 +174,11 @@ elif menu == "Evaluasi Model":
 
     st.header("Evaluasi Model")
 
-    # Load dataset
     df = pd.read_csv("grab_reviews.csv", sep=";", encoding="latin1")
 
-    # Preprocessing
     df["clean"] = df["content"].apply(preprocess)
-
     X = vectorizer.transform(df["clean"])
 
-    # Konversi skor menjadi label sentimen
     def label(score):
         if score <= 2:
             return "negatif"
@@ -227,29 +187,22 @@ elif menu == "Evaluasi Model":
         else:
             return "positif"
 
-    y_true = df["score"].apply(label)
+    y_true = df["score"].apply(label).astype(str).str.lower()
     y_pred = model.predict(X)
+    y_pred = pd.Series(y_pred).astype(str).str.lower()
 
-    # ================================
-    # AKURASI
-    # ================================
+    # Akurasi
     accuracy = accuracy_score(y_true, y_pred)
 
     st.subheader("Akurasi Model")
     st.success(f"Akurasi Model SVM: {accuracy:.2f}")
 
-    # ================================
-    # CONFUSION MATRIX (FIXED)
-    # ================================
+    # Confusion Matrix
     st.subheader("Confusion Matrix")
 
     labels_order = ["negatif", "netral", "positif"]
 
-    cm = confusion_matrix(
-        y_true,
-        y_pred,
-        labels=labels_order
-    )
+    cm = confusion_matrix(y_true, y_pred, labels=labels_order)
 
     fig, ax = plt.subplots()
 
@@ -268,9 +221,7 @@ elif menu == "Evaluasi Model":
 
     st.pyplot(fig)
 
-    # ================================
-    # CLASSIFICATION REPORT (FIXED)
-    # ================================
+    # Classification Report
     st.subheader("Classification Report")
 
     report = classification_report(
@@ -293,13 +244,10 @@ elif menu == "Visualisasi Dataset":
     df = pd.read_csv("grab_reviews.csv", sep=";", encoding="latin1")
 
     def label(score):
-
         if score <= 2:
             return "negatif"
-
         elif score == 3:
             return "netral"
-
         else:
             return "positif"
 
@@ -318,7 +266,6 @@ elif menu == "Visualisasi Dataset":
     )
 
     ax.set_xlabel("Sentimen")
-
     ax.set_ylabel("Jumlah")
 
     st.pyplot(fig)
@@ -336,11 +283,7 @@ elif menu == "Visualisasi Dataset":
     ).generate(text)
 
     fig, ax = plt.subplots()
-
     ax.imshow(wc)
-
     ax.axis("off")
 
     st.pyplot(fig)
-
-

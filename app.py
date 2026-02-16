@@ -192,19 +192,28 @@ if menu == "Analisis Sentimen":
 
 
 # ====================================
-# MENU 2: PROCESSING
+# MENU 2: PROCESSING (SUDAH DIPERBAIKI)
 # ====================================
 
 elif menu == "Processing":
 
     st.header("Tahapan Text Processing")
 
+    # tampilkan hanya kolom tertentu
     st.subheader("Dataset Awal")
-    st.dataframe(df.head())
+
+    df_display = df[["content", "score", "sentimen"]].rename(columns={
+        "content": "Ulasan",
+        "score": "Score",
+        "sentimen": "Sentimen"
+    })
+
+    st.dataframe(df_display)
 
 
+    # pilih index
     index = st.number_input(
-        "Pilih index data",
+        "Pilih index data untuk melihat proses:",
         min_value=0,
         max_value=len(df)-1,
         value=0
@@ -213,52 +222,53 @@ elif menu == "Processing":
 
     original_text = df.loc[index, "content"]
 
-    st.subheader("Teks Asli")
+    st.markdown("---")
+    st.subheader("1. Teks Asli")
     st.write(original_text)
 
 
     case = case_folding(original_text)
-    st.subheader("Case Folding")
+    st.subheader("2. Case Folding")
     st.write(case)
 
 
     no_url = remove_url(case)
-    st.subheader("Remove URL")
+    st.subheader("3. Remove URL")
     st.write(no_url)
 
 
     no_symbol = remove_symbol(no_url)
-    st.subheader("Remove Symbol")
+    st.subheader("4. Remove Symbol")
     st.write(no_symbol)
 
 
     clean_text = remove_whitespace(no_symbol)
-    st.subheader("Remove Whitespace")
+    st.subheader("5. Remove Whitespace")
     st.write(clean_text)
 
 
     tokens = tokenizing(clean_text)
-    st.subheader("Tokenizing")
+    st.subheader("6. Tokenizing")
     st.write(tokens)
 
 
     no_stopword = stopword_removal(tokens)
-    st.subheader("Stopword Removal")
+    st.subheader("7. Stopword Removal")
     st.write(no_stopword)
 
 
     stemmed = stemming(no_stopword)
-    st.subheader("Stemming")
+    st.subheader("8. Stemming")
     st.write(stemmed)
 
 
     final_text = " ".join(stemmed)
 
-    st.subheader("Final Preprocessing")
+    st.subheader("9. Final Preprocessing")
     st.success(final_text)
 
 
-    st.subheader("TF-IDF Vector")
+    st.subheader("10. TF-IDF Vector")
 
     vector = vectorizer.transform([final_text])
 
@@ -285,12 +295,10 @@ elif menu == "Evaluasi Model":
     y_true = df["sentimen"]
     y_pred = model.predict(X)
 
-
     acc = accuracy_score(y_true, y_pred)
 
     st.subheader("Akurasi")
     st.success(f"{acc:.2f}")
-
 
     st.subheader("Confusion Matrix")
 
@@ -340,7 +348,6 @@ elif menu == "Visualisasi Dataset":
 
     col1, col2 = st.columns(2)
 
-
     with col1:
 
         st.subheader("Distribusi Sentimen")
@@ -380,10 +387,8 @@ elif menu == "Visualisasi Dataset":
     col1, col2, col3 = st.columns(3)
 
     for sentimen, col in zip(
-
         ["positif", "netral", "negatif"],
         [col1, col2, col3]
-
     ):
 
         text = " ".join(

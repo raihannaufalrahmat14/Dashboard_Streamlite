@@ -34,6 +34,7 @@ menu = st.sidebar.radio(
     "Menu Navigasi",
     (
         "Analisis Sentimen",
+        "Processing",
         "Evaluasi Model",
         "Visualisasi Dataset"
     )
@@ -49,31 +50,57 @@ st.sidebar.info("Streamlit Sentiment Analysis v1.0")
 
 @st.cache_resource
 def load_nlp():
+
     nltk.download('stopwords')
+
     stop_words = set(stopwords.words('indonesian'))
+
     factory = StemmerFactory()
     stemmer = factory.create_stemmer()
+
     return stop_words, stemmer
+
 
 stop_words, stemmer = load_nlp()
 
 
 # ====================================
-# PREPROCESSING
+# PREPROCESSING FUNCTIONS
 # ====================================
 
-def cleaning(text):
-    text = str(text).lower()
-    text = re.sub(r'http\S+', '', text)
-    text = re.sub(r'[^a-z\s]', '', text)
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text
+def case_folding(text):
+    return str(text).lower()
+
+def remove_url(text):
+    return re.sub(r'http\S+', '', text)
+
+def remove_symbol(text):
+    return re.sub(r'[^a-z\s]', '', text)
+
+def remove_whitespace(text):
+    return re.sub(r'\s+', ' ', text).strip()
+
+def tokenizing(text):
+    return text.split()
+
+def stopword_removal(tokens):
+    return [word for word in tokens if word not in stop_words]
+
+def stemming(tokens):
+    return [stemmer.stem(word) for word in tokens]
+
 
 def preprocess(text):
-    text = cleaning(text)
-    tokens = text.split()
-    tokens = [word for word in tokens if word not in stop_words]
-    tokens = [stemmer.stem(word) for word in tokens]
+
+    text = case_folding(text)
+    text = remove_url(text)
+    text = remove_symbol(text)
+    text = remove_whitespace(text)
+
+    tokens = tokenizing(text)
+    tokens = stopword_removal(tokens)
+    tokens = stemming(tokens)
+
     return " ".join(tokens)
 
 
@@ -83,11 +110,40 @@ def preprocess(text):
 
 @st.cache_resource
 def load_model():
+
     model = joblib.load("best_svm_model.pkl")
     vectorizer = joblib.load("tfidf_vectorizer.pkl")
+
     return model, vectorizer
 
+
 model, vectorizer = load_model()
+
+
+# ====================================
+# LOAD DATASET
+# ====================================
+
+@st.cache_data
+def load_data():
+
+    df = pd.read_csv("grab_reviews.csv", sep=";", encoding="latin1")
+
+    def label(score):
+
+        if score <= 2:
+            return "negatif"
+        elif score == 3:
+            return "netral"
+        else:
+            return "positif"
+
+    df["sentimen"] = df["score"].apply(label)
+
+    return df
+
+
+df = load_data()
 
 
 # ====================================
@@ -98,7 +154,7 @@ st.title("📊 Sistem Analisis Sentimen Ulasan Grab (SVM)")
 
 
 # ====================================
-# MENU 1: ANALISIS
+# MENU 1: ANALISIS SENTIMEN
 # ====================================
 
 if menu == "Analisis Sentimen":
@@ -111,12 +167,19 @@ if menu == "Analisis Sentimen":
 
         if text == "":
             st.warning("Masukkan teks terlebih dahulu")
+
         else:
 
             processed = preprocess(text)
+
             vector = vectorizer.transform([processed])
+
             prediction = model.predict(vector)[0]
+
             prediction = str(prediction).lower()
+
+            st.subheader("Hasil Preprocessing")
+            st.info(processed)
 
             if prediction == "positif":
                 st.success("Sentimen: POSITIF")
@@ -129,50 +192,111 @@ if menu == "Analisis Sentimen":
 
 
 # ====================================
-# MENU 2: EVALUASI MODEL
+# MENU 2: PROCESSING
+# ====================================
+
+elif menu == "Processing":
+
+    st.header("Tahapan Text Processing")
+
+    st.subheader("Dataset Awal")
+    st.dataframe(df.head())
+
+
+    index = st.number_input(
+        "Pilih index data",
+        min_value=0,
+        max_value=len(df)-1,
+        value=0
+    )
+
+
+    original_text = df.loc[index, "content"]
+
+    st.subheader("Teks Asli")
+    st.write(original_text)
+
+
+    case = case_folding(original_text)
+    st.subheader("Case Folding")
+    st.write(case)
+
+
+    no_url = remove_url(case)
+    st.subheader("Remove URL")
+    st.write(no_url)
+
+
+    no_symbol = remove_symbol(no_url)
+    st.subheader("Remove Symbol")
+    st.write(no_symbol)
+
+
+    clean_text = remove_whitespace(no_symbol)
+    st.subheader("Remove Whitespace")
+    st.write(clean_text)
+
+
+    tokens = tokenizing(clean_text)
+    st.subheader("Tokenizing")
+    st.write(tokens)
+
+
+    no_stopword = stopword_removal(tokens)
+    st.subheader("Stopword Removal")
+    st.write(no_stopword)
+
+
+    stemmed = stemming(no_stopword)
+    st.subheader("Stemming")
+    st.write(stemmed)
+
+
+    final_text = " ".join(stemmed)
+
+    st.subheader("Final Preprocessing")
+    st.success(final_text)
+
+
+    st.subheader("TF-IDF Vector")
+
+    vector = vectorizer.transform([final_text])
+
+    tfidf_df = pd.DataFrame(
+        vector.toarray(),
+        columns=vectorizer.get_feature_names_out()
+    )
+
+    st.dataframe(tfidf_df)
+
+
+# ====================================
+# MENU 3: EVALUASI MODEL
 # ====================================
 
 elif menu == "Evaluasi Model":
 
     st.header("Evaluasi Model")
 
-    df = pd.read_csv("grab_reviews.csv", sep=";", encoding="latin1")
-
-    def label(score):
-        if score <= 2:
-            return "negatif"
-        elif score == 3:
-            return "netral"
-        else:
-            return "positif"
-
-    df["sentimen"] = df["score"].apply(label)
-
     df["clean"] = df["content"].apply(preprocess)
 
     X = vectorizer.transform(df["clean"])
 
-    y_true = df["sentimen"].astype(str).str.lower()
+    y_true = df["sentimen"]
     y_pred = model.predict(X)
-    y_pred = pd.Series(y_pred).astype(str).str.lower()
 
-    labels_order = ["negatif", "netral", "positif"]
 
-    # ACCURACY
     acc = accuracy_score(y_true, y_pred)
 
     st.subheader("Akurasi")
     st.success(f"{acc:.2f}")
 
 
-    # CONFUSION MATRIX
     st.subheader("Confusion Matrix")
 
-    cm = confusion_matrix(
-        y_true,
-        y_pred,
-        labels=labels_order
-    )
+    labels_order = ["negatif", "netral", "positif"]
+
+    cm = confusion_matrix(y_true, y_pred, labels=labels_order)
 
     fig, ax = plt.subplots()
 
@@ -185,13 +309,12 @@ elif menu == "Evaluasi Model":
         yticklabels=labels_order
     )
 
-    ax.set_xlabel("Analisis")
+    ax.set_xlabel("Prediksi")
     ax.set_ylabel("Aktual")
 
     st.pyplot(fig)
 
 
-    # CLASSIFICATION REPORT FIX
     st.subheader("Classification Report")
 
     report = classification_report(
@@ -206,30 +329,18 @@ elif menu == "Evaluasi Model":
 
 
 # ====================================
-# MENU 3: VISUALISASI
+# MENU 4: VISUALISASI DATASET
 # ====================================
 
 elif menu == "Visualisasi Dataset":
 
     st.header("Visualisasi Dataset")
 
-    df = pd.read_csv("grab_reviews.csv", sep=";", encoding="latin1")
-
-    def label(score):
-        if score <= 2:
-            return "negatif"
-        elif score == 3:
-            return "netral"
-        else:
-            return "positif"
-
-    df["sentimen"] = df["score"].apply(label)
-
     summary = df["sentimen"].value_counts()
 
     col1, col2 = st.columns(2)
 
-    # BAR CHART
+
     with col1:
 
         st.subheader("Distribusi Sentimen")
@@ -244,14 +355,13 @@ elif menu == "Visualisasi Dataset":
         st.pyplot(fig)
 
 
-    # DONUT CHART
     with col2:
 
         st.subheader("Donut Chart")
 
         fig, ax = plt.subplots()
 
-        wedges, texts, autotexts = ax.pie(
+        ax.pie(
             summary.values,
             labels=summary.index,
             autopct="%1.1f%%",
@@ -263,16 +373,22 @@ elif menu == "Visualisasi Dataset":
         st.pyplot(fig)
 
 
-    # WORDCLOUD PER SENTIMEN
-    st.subheader("WordCloud per Sentimen")
+    st.subheader("WordCloud")
 
     df["clean"] = df["content"].apply(preprocess)
 
     col1, col2, col3 = st.columns(3)
 
-    for sentimen, col in zip(["positif", "netral", "negatif"], [col1, col2, col3]):
+    for sentimen, col in zip(
 
-        text = " ".join(df[df["sentimen"] == sentimen]["clean"])
+        ["positif", "netral", "negatif"],
+        [col1, col2, col3]
+
+    ):
+
+        text = " ".join(
+            df[df["sentimen"] == sentimen]["clean"]
+        )
 
         if text.strip() != "":
 
